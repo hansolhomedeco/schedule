@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>생산 일정 조회</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', 'Apple SD Gothic Neo', sans-serif; background: #f4f7fb; color: #1a2340; min-height: 100vh; }
+  header {
+    background: linear-gradient(135deg, #1565c0 0%, #1e88e5 100%);
+    padding: 28px 24px 24px; text-align: center;
+    box-shadow: 0 2px 12px rgba(21,101,192,0.18);
+  }
+  header h1 { color: #fff; font-size: 1.6rem; font-weight: 700; }
+  header p { color: rgba(255,255,255,0.78); font-size: 0.85rem; margin-top: 4px; }
+
+  .loading { text-align: center; padding: 60px 20px; color: #8fa3c0; }
+  .loading .spinner {
+    width: 36px; height: 36px; border: 3px solid #d0ddf0;
+    border-top-color: #1e88e5; border-radius: 50%;
+    animation: spin 0.8s linear infinite; margin: 0 auto 14px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* 붙여넣기 패널 */
+  .paste-panel { max-width: 960px; margin: 18px auto 0; padding: 0 20px; }
+  .paste-toggle {
+    display: flex; align-items: center; gap: 10px;
+    background: #fff; border-radius: 10px; padding: 12px 18px; cursor: pointer;
+    box-shadow: 0 1px 6px rgba(21,101,192,0.08); border: 1.5px solid #d0ddf0;
+    user-select: none;
+  }
+  .paste-toggle:hover { border-color: #1e88e5; }
+  .paste-toggle .arrow { transition: transform 0.2s; font-size: 0.8rem; color: #8fa3c0; }
+  .paste-toggle.open .arrow { transform: rotate(180deg); }
+  .paste-toggle .tlabel { font-size: 0.88rem; font-weight: 600; color: #3a5a9a; flex: 1; }
+  .paste-toggle .hint { font-size: 0.78rem; color: #8fa3c0; }
+  .paste-body {
+    background: #fff; border: 1.5px solid #d0ddf0; border-top: none;
+    border-radius: 0 0 10px 10px; padding: 16px 18px; display: none;
+    box-shadow: 0 4px 12px rgba(21,101,192,0.06);
+  }
+  .paste-body.open { display: block; }
+  .paste-body p { font-size: 0.8rem; color: #8fa3c0; margin-bottom: 8px; }
+  .paste-body p strong { color: #3a5a9a; }
+  textarea {
+    width: 100%; height: 140px; border: 1.5px solid #d0ddf0;
+    border-radius: 8px; padding: 10px 12px; font-size: 0.82rem;
+    color: #1a2340; resize: vertical; outline: none; font-family: monospace;
+  }
+  textarea:focus { border-color: #1e88e5; }
+  .paste-actions { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+  .btn-load {
+    background: #1e88e5; color: #fff; border: none; border-radius: 8px;
+    padding: 9px 22px; font-size: 0.85rem; font-weight: 700; cursor: pointer;
+  }
+  .btn-load:hover { background: #1565c0; }
+  .btn-clear-data {
+    background: none; color: #8fa3c0; border: 1.5px solid #d0ddf0;
+    border-radius: 8px; padding: 9px 16px; font-size: 0.85rem; cursor: pointer;
+  }
+  .status-msg { font-size: 0.8rem; margin-left: 4px; }
+  .status-msg.ok { color: #2e7d32; }
+  .status-msg.error { color: #e53935; }
+
+  .search-wrap { max-width: 720px; margin: 14px auto 0; padding: 0 20px; }
+  .search-box {
+    display: flex; align-items: center; background: #fff;
+    border-radius: 14px; box-shadow: 0 4px 24px rgba(21,101,192,0.13);
+    padding: 0 18px; border: 2px solid transparent; transition: border 0.2s;
+  }
+  .search-box:focus-within { border-color: #1e88e5; }
+  .search-icon { color: #90a4c8; font-size: 1.2rem; margin-right: 10px; }
+  .search-box input {
+    flex: 1; border: none; outline: none; font-size: 1.05rem;
+    padding: 16px 0; color: #1a2340; background: transparent;
+  }
+  .search-box input::placeholder { color: #b0bdd6; }
+  .clear-btn { background: none; border: none; cursor: pointer; color: #b0bdd6; font-size: 1.1rem; padding: 4px; display: none; }
+  .clear-btn.show { display: block; }
+
+  .filter-row {
+    max-width: 960px; margin: 12px auto 0; padding: 0 20px;
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  }
+  .filter-btn {
+    padding: 5px 14px; border-radius: 20px; border: 1.5px solid #d0ddf0;
+    background: #fff; color: #5572a0; font-size: 0.8rem; cursor: pointer;
+    transition: all 0.15s; font-weight: 500;
+  }
+  .filter-btn.active, .filter-btn:hover { background: #1e88e5; color: #fff; border-color: #1e88e5; }
+
+  .stats-row {
+    max-width: 960px; margin: 12px auto 0; padding: 0 20px;
+    display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+  }
+  .stat-card {
+    background: #fff; border-radius: 10px; padding: 11px 18px;
+    box-shadow: 0 1px 6px rgba(21,101,192,0.07); min-width: 110px;
+  }
+  .stat-card .label { font-size: 0.73rem; color: #8fa3c0; font-weight: 500; }
+  .stat-card .value { font-size: 1.2rem; font-weight: 700; color: #1565c0; margin-top: 1px; }
+  .refresh-btn {
+    margin-left: auto; background: none; border: 1.5px solid #d0ddf0;
+    border-radius: 8px; padding: 8px 14px; font-size: 0.8rem; color: #5572a0;
+    cursor: pointer; display: flex; align-items: center; gap: 5px;
+  }
+  .refresh-btn:hover { border-color: #1e88e5; color: #1e88e5; }
+  .refresh-btn.spinning span { display: inline-block; animation: spin 0.8s linear infinite; }
+  .updated-at { font-size: 0.75rem; color: #b0bdd6; }
+
+  .table-wrap { max-width: 960px; margin: 12px auto 32px; padding: 0 20px; }
+  table {
+    width: 100%; border-collapse: collapse; background: #fff;
+    border-radius: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(21,101,192,0.07);
+  }
+  thead tr { background: #e8f0fb; }
+  th { padding: 12px 16px; text-align: left; font-size: 0.79rem; font-weight: 700; color: #3a5a9a; white-space: nowrap; }
+  td { padding: 10px 16px; font-size: 0.87rem; border-top: 1px solid #f0f4fa; }
+  tr:hover td { background: #f5f8ff; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 0.73rem; font-weight: 600; }
+  .badge-today    { background: #e3f2fd; color: #1565c0; }
+  .badge-upcoming { background: #e8f5e9; color: #2e7d32; }
+  .badge-past     { background: #f5f5f5; color: #9e9e9e; }
+  .badge-soon     { background: #fff3e0; color: #e65100; }
+
+  tr.past td { color: #bbb; }
+  tr.today-row td { background: #e8f4ff !important; font-weight: 600; }
+  .product-name { font-weight: 500; color: #22336a; }
+  .code { font-size: 0.77rem; color: #8fa3c0; font-family: monospace; }
+  .qty { font-weight: 700; color: #1565c0; text-align: right; white-space: nowrap; }
+  .process { font-size: 0.77rem; font-weight: 700; padding: 2px 7px; border-radius: 5px; }
+  .process-HRL { background: #e3f2fd; color: #1565c0; }
+  .process-CRL { background: #f3e5f5; color: #7b1fa2; }
+  .empty-state { text-align: center; padding: 50px 20px; color: #b0bdd6; }
+  .empty-state .icon { font-size: 2.5rem; margin-bottom: 10px; }
+  .highlight { background: #fff176; border-radius: 2px; }
+
+  @media (max-width: 600px) {
+    th:nth-child(2), td:nth-child(2) { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>📋 생산 일정 조회</h1>
+  <p>패턴명 또는 코드로 검색하세요</p>
+</header>
+
+<!-- 데이터 업데이트 패널 -->
+<div class="paste-panel">
+  <div class="paste-toggle" id="pasteToggle" onclick="togglePaste()">
+    <span>📥</span>
+    <span class="tlabel">데이터 업데이트</span>
+    <span class="hint">엑셀에서 복사 → 붙여넣기</span>
+    <span class="arrow">▼</span>
+  </div>
+  <div class="paste-body" id="pasteBody">
+    <p>엑셀/구글시트에서 <strong>생산일·공정·코드·제품명·수량</strong> 열 복사(Ctrl+C) → 아래 붙여넣기(Ctrl+V)</p>
+    <p style="margin-top:4px">📌 <strong>5/1(금)</strong>, <strong>4/30</strong>, <strong>2026-05-01</strong> 날짜 형식 모두 OK · 날짜 없는 행은 위 날짜 자동 적용</p>
+    <textarea id="pasteArea" placeholder="여기에 붙여넣기 하세요..."></textarea>
+    <div class="paste-actions">
+      <button class="btn-load" onclick="loadPaste()">✅ 불러오기</button>
+      <button class="btn-clear-data" onclick="clearPaste()">초기화</button>
+      <span class="status-msg" id="pasteStatus"></span>
+    </div>
+  </div>
+</div>
+
+<!-- 검색 -->
+<div class="search-wrap">
+  <div class="search-box">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="searchInput" placeholder="제품명, 패턴명, 코드 검색..." autocomplete="off">
+    <button class="clear-btn" id="clearBtn" onclick="clearSearch()">✕</button>
+  </div>
+</div>
+
+<div class="filter-row">
+  <span style="font-size:0.78rem;color:#8fa3c0;font-weight:500;">공정:</span>
+  <button class="filter-btn active" onclick="setFilter('all',this)">전체</button>
+  <button class="filter-btn" onclick="setFilter('HRL',this)">HRL</button>
+  <button class="filter-btn" onclick="setFilter('CRL',this)">CRL</button>
+  <span style="margin-left:8px;font-size:0.78rem;color:#8fa3c0;font-weight:500;">기간:</span>
+  <button class="filter-btn active" onclick="setPeriod('all',this)">전체</button>
+  <button class="filter-btn" onclick="setPeriod('upcoming',this)">예정</button>
+  <button class="filter-btn" onclick="setPeriod('past',this)">완료</button>
+</div>
+
+<div class="stats-row">
+  <div class="stat-card"><div class="label">전체 항목</div><div class="value" id="statTotal">-</div></div>
+  <div class="stat-card"><div class="label">예정 일정</div><div class="value" id="statUpcoming">-</div></div>
+  <div class="stat-card"><div class="label">전체 수량</div><div class="value" id="statQty">-</div></div>
+  <button class="refresh-btn" id="refreshBtn" onclick="fetchSheet()">
+    <span>🔄</span> Sheets 새로고침 <span class="updated-at" id="updatedAt"></span>
+  </button>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>생산일</th><th>공정</th><th>코드</th>
+        <th>제품명 / 패턴명</th><th style="text-align:right">수량</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody">
+      <tr><td colspan="5"><div class="empty-state"><div class="icon">📂</div>
+        <p>엑셀 데이터를 붙여넣거나 Sheets 새로고침을 눌러주세요</p>
+      </div></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQixrVHKgXsnz0G8q_nIVMCu8Fto8T4emLYe8dRt4zmznHmtiRb-UHSwu0OEovYFTQtxzAT99lW4pZ-/pub?output=csv';
+const SKIP = ['휴동','소계','합계','계획','정비','수량변경'];
+let allData = [], filterProc = 'all', filterPeriod = 'all';
+const today = new Date(); today.setHours(0,0,0,0);
+
+function parseDate(str) {
+  if (!str) return null;
+  str = str.trim().replace(/\(.*?\)/g,'').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return new Date(str);
+  const m = str.match(/^(\d{1,2})\/(\d{1,2})$/);
+  if (m) return new Date(today.getFullYear(), parseInt(m[1])-1, parseInt(m[2]));
+  return null;
+}
+function diffDays(d) {
+  if (!d) return null;
+  const t = new Date(d); t.setHours(0,0,0,0);
+  return Math.round((t - today) / 86400000);
+}
+function fmtDate(d) {
+  if (!d) return '-';
+  const days = ['일','월','화','수','목','금','토'];
+  return `${d.getMonth()+1}/${d.getDate()}(${days[d.getDay()]})`;
+}
+function parseQty(s) { return parseInt((s||'').toString().replace(/[^0-9]/g,''))||0; }
+function shouldSkip(str) { return SKIP.some(k => (str||'').includes(k)); }
+
+// 탭 구분 텍스트 파싱 (붙여넣기)
+function parseTSV(text) {
+  const lines = text.trim().split('\n');
+  const data = []; let lastDate = null;
+  let headerSkipped = false;
+  for (const line of lines) {
+    const cols = line.split('\t').map(c => c.trim());
+    if (cols.every(c => !c)) continue;
+    if (!headerSkipped && cols.some(c => /생산일|공정|코드|제품명|수량|오더/.test(c))) {
+      headerSkipped = true; continue;
+    }
+    if (shouldSkip(cols.join(''))) continue;
+
+    let dateStr, proc, code, name, qtyStr;
+    if (cols.length >= 6) {
+      [dateStr, proc, , code, name, qtyStr] = cols;
+    } else if (cols.length === 5) {
+      [dateStr, proc, code, name, qtyStr] = cols;
+    } else if (cols.length === 4) {
+      [dateStr, code, name, qtyStr] = cols; proc = '';
+    } else continue;
+
+    const pd = parseDate(dateStr);
+    if (pd) lastDate = pd;
+    const dateVal = pd || lastDate;
+    name = (name||'').trim();
+    if (!name || /^[\s\-,\.0-9]+$/.test(name) || shouldSkip(name)) continue;
+    const qty = parseQty(qtyStr);
+    if (!qty && !code) continue;
+    proc = (proc||'').replace(/[^A-Za-z가-힣]/g,'').trim();
+    data.push({ date: dateVal, proc, code: (code||'').trim(), name, qty });
+  }
+  return data;
+}
+
+// CSV 파싱 (Google Sheets)
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  const rows = lines.map(line => {
+    const cols = []; let cur = '', inQ = false;
+    for (const c of line) {
+      if (c === '"') inQ = !inQ;
+      else if (c === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
+      else cur += c;
+    }
+    cols.push(cur.trim()); return cols;
+  });
+  if (rows.length < 2) return [];
+  const hdr = rows[0].map(h => h.toLowerCase().replace(/\s/g,''));
+  const fi = (...kws) => hdr.findIndex(h => kws.some(k => h.includes(k)));
+  const col = {
+    date: fi('생산일','날짜','일자') >= 0 ? fi('생산일','날짜','일자') : 0,
+    proc: fi('공정','라인') >= 0 ? fi('공정','라인') : 1,
+    code: fi('코드','품번') >= 0 ? fi('코드','품번') : 3,
+    name: fi('제품명','패턴명','품명') >= 0 ? fi('제품명','패턴명','품명') : 4,
+    qty:  fi('수량','오더량','오더') >= 0 ? fi('수량','오더량','오더') : 5,
+  };
+  const data = []; let lastDate = null;
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (r.every(c => !c)) continue;
+    const rawDate = r[col.date]||'';
+    const pd = parseDate(rawDate);
+    if (pd) lastDate = pd;
+    const dateVal = pd || lastDate;
+    const name = (r[col.name]||'').trim();
+    if (!name || /^[\s\-,\.0-9]+$/.test(name) || shouldSkip(name) || shouldSkip(rawDate)) continue;
+    const qty = parseQty(r[col.qty]);
+    const code = (r[col.code]||'').trim();
+    if (!qty && !code) continue;
+    const proc = (r[col.proc]||'').replace(/[^A-Za-z가-힣]/g,'').trim();
+    data.push({ date: dateVal, proc, code, name, qty });
+  }
+  return data;
+}
+
+// 붙여넣기 로드
+function loadPaste() {
+  const raw = document.getElementById('pasteArea').value.trim();
+  if (!raw) { setPasteStatus('데이터를 붙여넣어 주세요.','error'); return; }
+  const data = parseTSV(raw);
+  if (!data.length) { setPasteStatus('파싱 실패. 열 구조를 확인해주세요.','error'); return; }
+  allData = data;
+  setPasteStatus(`✅ ${data.length}개 항목 로드 완료`,'ok');
+  document.getElementById('pasteToggle').classList.remove('open');
+  document.getElementById('pasteBody').classList.remove('open');
+  render();
+}
+
+// Google Sheets 로드
+async function fetchSheet() {
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('spinning');
+  try {
+    const res = await fetch(SHEET_URL + '&t=' + Date.now());
+    if (!res.ok) throw new Error();
+    const text = await res.text();
+    const data = parseCSV(text);
+    if (!data.length) throw new Error();
+    allData = data;
+    const now = new Date();
+    document.getElementById('updatedAt').textContent =
+      `${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')} 기준`;
+    render();
+  } catch(e) {
+    alert('Sheets 불러오기 실패.\nGitHub Pages에서는 정상 작동합니다.\n로컬 테스트는 붙여넣기 방식을 사용해주세요.');
+  } finally {
+    btn.classList.remove('spinning');
+  }
+}
+
+function setPasteStatus(msg, type) {
+  const el = document.getElementById('pasteStatus');
+  el.textContent = msg; el.className = 'status-msg ' + type;
+}
+function togglePaste() {
+  document.getElementById('pasteToggle').classList.toggle('open');
+  document.getElementById('pasteBody').classList.toggle('open');
+}
+function clearPaste() { document.getElementById('pasteArea').value = ''; allData = []; setPasteStatus('',''); render(); }
+
+function highlight(text, q) {
+  if (!q) return text;
+  return text.replace(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi'), '<span class="highlight">$1</span>');
+}
+
+function render() {
+  const q = document.getElementById('searchInput').value.trim();
+  document.getElementById('clearBtn').classList.toggle('show', q.length > 0);
+  let data = [...allData];
+  if (filterProc !== 'all') data = data.filter(r => r.proc === filterProc);
+  if (filterPeriod === 'upcoming') data = data.filter(r => (diffDays(r.date)??-1) >= 0);
+  if (filterPeriod === 'past')     data = data.filter(r => (diffDays(r.date)??-1) < 0);
+  if (q) data = data.filter(r => r.name.toLowerCase().includes(q.toLowerCase()) || r.code.includes(q));
+  data.sort((a,b) => {
+    const da = diffDays(a.date)??9999, db = diffDays(b.date)??9999;
+    if (da >= 0 && db >= 0) return da - db;
+    if (da < 0  && db < 0)  return db - da;
+    return da >= 0 ? -1 : 1;
+  });
+  const upcoming = data.filter(r => (diffDays(r.date)??-1) >= 0);
+  document.getElementById('statTotal').textContent    = data.length.toLocaleString();
+  document.getElementById('statUpcoming').textContent = upcoming.length.toLocaleString();
+  document.getElementById('statQty').textContent      = data.reduce((s,r)=>s+r.qty,0).toLocaleString();
+  const tbody = document.getElementById('tableBody');
+  if (!data.length) {
+    const msg = allData.length ? '검색 결과가 없습니다' : '엑셀 데이터를 붙여넣거나 Sheets 새로고침을 눌러주세요';
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><div class="icon">${allData.length?'🔍':'📂'}</div><p>${msg}</p></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = data.map(r => {
+    const diff = diffDays(r.date);
+    const isToday = diff===0, isSoon = diff>0&&diff<=2, isPast = diff<0;
+    let badge = isToday ? '<span class="badge badge-today">오늘</span>'
+      : isSoon  ? `<span class="badge badge-soon">D-${diff}</span>`
+      : diff > 0 ? `<span class="badge badge-upcoming">D-${diff}</span>`
+      : `<span class="badge badge-past">D+${Math.abs(diff)}</span>`;
+    return `<tr class="${isPast?'past':isToday?'today-row':''}">
+      <td>${r.date?fmtDate(r.date):'-'} ${badge}</td>
+      <td><span class="process process-${r.proc}">${r.proc||'-'}</span></td>
+      <td class="code">${highlight(r.code,q)}</td>
+      <td class="product-name">${highlight(r.name,q)}</td>
+      <td class="qty">${r.qty.toLocaleString()}</td>
+    </tr>`;
+  }).join('');
+}
+
+function setFilter(val, btn) {
+  filterProc = val;
+  document.querySelectorAll('.filter-row button').forEach(b => { if(['전체','HRL','CRL'].includes(b.textContent)) b.classList.remove('active'); });
+  btn.classList.add('active'); render();
+}
+function setPeriod(val, btn) {
+  filterPeriod = val;
+  document.querySelectorAll('.filter-row button').forEach(b => { if(['전체','예정','완료'].includes(b.textContent)) b.classList.remove('active'); });
+  btn.classList.add('active'); render();
+}
+function clearSearch() { document.getElementById('searchInput').value = ''; render(); }
+document.getElementById('searchInput').addEventListener('input', render);
+
+// GitHub Pages 환경에서는 자동으로 Sheets 로드 시도
+if (location.hostname.includes('github.io') || location.hostname.includes('netlify.app')) {
+  fetchSheet();
+}
+</script>
+</body>
+</html>
