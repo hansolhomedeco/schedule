@@ -422,7 +422,8 @@ function clearSearch() { document.getElementById('searchInput').value = ''; rend
 document.getElementById('searchInput').addEventListener('input', render);
 
 // GitHub Pages 환경에서는 자동으로 Sheets 로드 시도
-if (location.hostname.includes('github.io') || location.hostname.includes('netlify.app')) {
+// 로컬(Claude 미리보기)이 아니면 무조건 Sheets 자동 로드
+if (location.hostname !== 'localhost' && !location.hostname.includes('claude.ai')) {
   fetchSheet();
 }
 </script>
