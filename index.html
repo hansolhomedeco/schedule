@@ -202,8 +202,7 @@
   <table>
     <thead>
       <tr>
-        <th>생산일</th><th>공정</th><th>코드</th>
-        <th>제품명 / 패턴명</th><th style="text-align:right">수량</th>
+        <th>생산일</th><th>코드</th><th>제품명 / 패턴명</th>
       </tr>
     </thead>
     <tbody id="tableBody">
@@ -429,10 +428,8 @@ function render() {
       : `<span class="badge badge-past">D+${Math.abs(diff)}</span>`;
     return `<tr class="${isPast?'past':isToday?'today-row':''}">
       <td>${r.date?fmtDate(r.date):'-'} ${badge}</td>
-      <td><span class="process process-${r.proc}">${r.proc||'-'}</span></td>
       <td class="code">${highlight(r.code,q)}</td>
       <td class="product-name">${highlight(r.name,q)}</td>
-      <td class="qty">${r.qty.toLocaleString()}</td>
     </tr>`;
   }).join('');
 }
